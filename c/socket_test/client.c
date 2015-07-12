@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define MAX_CONNECTIONS 10000
+#define MAX_CONNECTIONS 100000
 #define WAIT_SECS 5
 #define BUF_SIZE 128
 
@@ -43,6 +43,7 @@ void close_handler(int s, short e, void* args) {
   free_connection_t(cont);
   num_conn--;
   show_num_conn();
+  printf("Connection closed by timer.");
 }
 
 void recv_handler(int sock, short ev_type, void* args) {

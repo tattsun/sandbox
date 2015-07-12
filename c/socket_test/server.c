@@ -14,20 +14,6 @@ int num_clients = 0;
 
 #define show_num_clients() printf("number of clients: %d\n", num_clients);
 
-typedef struct {
-  struct event* ev;
-} client_t;
-
-client_t* new_client() {
-  client_t* cli = (client_t*)malloc(sizeof(client_t));
-  return cli;
-}
-
-void free_client(client_t* cli) {
-  event_free(cli->ev);
-  free(cli);
-}
-
 void die(const char* msg) {
   perror(msg);
   exit(1);
