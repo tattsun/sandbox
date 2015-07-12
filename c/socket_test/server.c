@@ -12,7 +12,8 @@
 
 int num_clients = 0;
 
-#define show_num_clients() printf("number of clients: %d\n", num_clients);
+// #define show_num_clients() printf("number of clients: %d\n", num_clients);
+#define show_num_clients()
 
 void die(const char* msg) {
   perror(msg);
@@ -77,6 +78,16 @@ int main() {
   struct event_base* ev_base = event_base_new();
 
   open_server(ev_base, 8000);
+
+  clock_t start;
+  clock_t end;
+
+  while(1) {
+    start = clock();
+    event_base_loop(ev_base, 1);
+    end = clock();
+    printf("looptime: %ld\n", end-start);
+  }
 
   if (event_base_dispatch(ev_base) != 0) die("event_base_dispatch");
   event_base_free(ev_base);
