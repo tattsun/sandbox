@@ -1,7 +1,12 @@
 #include <event2/event.h>
+#include <event2/listener.h>
+#include <event2/util.h>
+#include <event2/bufferevent.h>
+#include <event2/buffer.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define BUF_SIZE 128
 
@@ -28,75 +33,66 @@ void die(const char* msg) {
   exit(1);
 }
 
-int open_server(int port) {
-  struct sockaddr_in sin;
-  int fd;
+void read_handler(struct bufferevent *bufev, void *ctx) {
+  size_t readlen;
+  char buf[BUF_SIZE];
+  readlen = bufferevent_read(bufev, buf, BUF_SIZE);
+  printf("Recv: ");
+  fwrite(buf, readlen, 1, stdout);
+  printf("\n");
+}
 
-  fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+void event_handler(struct bufferevent* bufev, short ev_type, void *ctx) {
+  if (ev_type & BEV_EVENT_ERROR) perror("event error");
+  if (ev_type & (BEV_EVENT_EOF|BEV_EVENT_ERROR)) {
+    bufferevent_free(bufev);
+    num_clients--;
+    show_num_clients();
+  }
+}
+
+void accept_handler(struct evconnlistener* listener, evutil_socket_t fd,
+                    struct sockaddr* addr, int socklen, void *ctx) {
+  struct event_base* ev_base = evconnlistener_get_base(listener);
+  struct bufferevent* bufev = bufferevent_socket_new(ev_base,
+                                                     fd, BEV_OPT_CLOSE_ON_FREE);
+  bufferevent_setcb(bufev, read_handler, NULL, event_handler, NULL);
+  bufferevent_enable(bufev, EV_READ|EV_WRITE);
+  bufferevent_write(bufev, "Write", 6);
+  num_clients++;
+  show_num_clients();
+}
+
+void accept_error_handler(struct evconnlistener* listener, void *ctx) {
+  struct event_base* ev_base = evconnlistener_get_base(listener);
+  int err = EVUTIL_SOCKET_ERROR();
+  fprintf(stderr, "accept_error: %d(%s)\n", err, evutil_socket_error_to_string(err));
+  event_base_loopexit(ev_base, NULL);
+}
+
+struct evconnlistener* open_server(struct event_base* ev_base, int port) {
+  struct sockaddr_in sin;
+  struct evconnlistener* listener;
+
   memset((void*)&sin , 0, sizeof(struct sockaddr_in));
   sin.sin_family = AF_INET;
   sin.sin_addr.s_addr = htonl(INADDR_ANY);
   sin.sin_port = htons(port);
 
-  if (bind(fd, (struct sockaddr*)&sin, sizeof(struct sockaddr)) != 0)
-    die("bind");
-  if (listen(fd, -1) != 0)
-    die("listen");
-
-  printf("Server listening on %d\n", port);
-
-  return fd;
-}
-
-void recv_handler(int csock, short ev_type, void* args) {
-  char buf[BUF_SIZE];
-  int recvlen;
-  client_t* cli = (client_t*)args;
-
-  if (ev_type & EV_READ) {
-    recvlen = recv(csock, buf, BUF_SIZE, 0);
-    if (recvlen == 0) {
-      free_client(cli);
-      close(csock);
-      num_clients--;
-      show_num_clients();
-    } else {
-      printf("received: ");
-      fwrite(buf, recvlen, 1, stdout);
-      printf("\n");
-    }
-  }
-}
-
-void accept_handler(int ssock, short ev_type, void* args) {
-  printf("Client accepted.\n");
-  struct event_base* ev_base = (struct event_base*)args;
-  struct event* ev = NULL;
-  struct sockaddr_in addr;
-  int csock;
-  socklen_t addrlen = sizeof(addr);
-  client_t* cli;
-  const char* msg = "Welcome";
-
-  if (ev_type & EV_READ) {
-    cli = new_client();
-    csock = accept(ssock, (struct sockaddr*)&addr, &addrlen);
-    ev = event_new(ev_base, csock, EV_READ | EV_PERSIST, recv_handler, (void*)cli);
-    cli->ev = ev;
-    if (event_add(ev, 0) != 0) die("event_add");
-    send(csock, msg, strlen(msg), 0);
-    num_clients++;
-    show_num_clients();
-  }
+  listener = evconnlistener_new_bind(ev_base, accept_handler, NULL,
+                                     LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE, -1,
+                                     (struct sockaddr*)&sin, sizeof(sin));
+  if(!listener) die("evconnlistener_new_bind");
+  evconnlistener_set_error_cb(listener, accept_error_handler);
+  return listener;
 }
 
 int main() {
   struct event_base* ev_base = event_base_new();
 
-  int sock = open_server(8000);
-  struct event* accept_ev = event_new(ev_base, sock, EV_READ | EV_PERSIST, accept_handler,
-                                      ev_base);
-  if (event_add(accept_ev, 0) != 0) die("event_add");
+  open_server(ev_base, 8000);
 
   if (event_base_dispatch(ev_base) != 0) die("event_base_dispatch");
+  event_base_free(ev_base);
+  return 0;
 }
