@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define MAX_CONNECTIONS 100000
+#define MAX_CONNECTIONS 25000
 #define WAIT_SECS 5
 #define BUF_SIZE 128
 
