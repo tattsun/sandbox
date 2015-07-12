@@ -4,7 +4,7 @@ build:
 	mkdir build
 
 build/server: server.c
-	gcc -o build/server -levent -Wall -O3 ./server.c
+	gcc -o build/server -Wall -O3 ./server.c -levent
 
 build/client: client.c
-	gcc -o build/client -levent -Wall -O3 ./client.c
+	gcc -o build/client -Wall -O3 ./client.c -levent
